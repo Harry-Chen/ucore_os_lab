@@ -306,7 +306,8 @@ print_stackframe(void) {
      uint32_t *ebp = (uint32_t*) read_ebp();
      uint32_t eip = read_eip();
 
-     for (int i = 0; i < STACKFRAME_DEPTH; i++) {
+     int i;
+     for (i = 0; i < STACKFRAME_DEPTH; i++) {
          cprintf("ebp:0x%08x eip:0x%08x args:", ebp, eip);
          uint32_t *args = ebp + 2;
          cprintf("0x%08x 0x%08x 0x%08x 0x%08x\n", args[0], args[1], args[2], args[3]);

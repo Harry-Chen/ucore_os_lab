@@ -48,7 +48,8 @@ idt_init(void) {
       *     Notice: the argument of lidt is idt_pd. try to find it!
       */
      extern uintptr_t __vectors[];
-     for (int i = 0; i < 256; ++i) {
+     int i;
+     for (i = 0; i < 256; ++i) {
          if (i != T_SYSCALL && i != T_SWITCH_TOK) {
             SETGATE(idt[i], 0, KERNEL_CS, __vectors[i], DPL_KERNEL);
          } else {
