@@ -303,7 +303,7 @@ print_stackframe(void) {
       *                   the calling funciton's ebp = ss:[ebp]
       */
 
-     uint32_t *ebp = (uint32_t*)read_ebp();
+     uint32_t *ebp = (uint32_t*) read_ebp();
      uint32_t eip = read_eip();
 
      for (int i = 0; i < STACKFRAME_DEPTH; i++) {
@@ -312,7 +312,7 @@ print_stackframe(void) {
          cprintf("0x%08x 0x%08x 0x%08x 0x%08x\n", args[0], args[1], args[2], args[3]);
          print_debuginfo(eip - 1);
          eip = ebp[1];
-         ebp = ebp[0];
+         ebp = (uint32_t*) ebp[0];
          // ebp boundary
          if (ebp == 0) break;
      }

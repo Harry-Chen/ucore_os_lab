@@ -22,3 +22,4 @@ chytesting
 disk0
 *.orig
 peda-session-*.txt
+.vscode
