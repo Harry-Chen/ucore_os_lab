@@ -2,6 +2,7 @@
 obj/
 bin/
 .gdb.in
+.gdb_history
 .qemu.out
 cscope.*
 ncscope.*
@@ -20,3 +21,4 @@ a.out
 chytesting
 disk0
 *.orig
+peda-session-*.txt
