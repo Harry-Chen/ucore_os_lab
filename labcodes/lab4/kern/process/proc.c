@@ -86,7 +86,7 @@ static struct proc_struct *
 alloc_proc(void) {
     struct proc_struct *proc = kmalloc(sizeof(struct proc_struct));
     if (proc != NULL) {
-    //LAB4:EXERCISE1 YOUR CODE
+    //LAB4:EXERCISE1 2016010981
     /*
      * below fields in proc_struct need to be initialized
      *       enum proc_state state;                      // Process state
@@ -102,6 +102,10 @@ alloc_proc(void) {
      *       uint32_t flags;                             // Process flag
      *       char name[PROC_NAME_LEN + 1];               // Process name
      */
+        memset(proc, 0, sizeof(struct proc_struct));
+        proc->state = PROC_UNINIT;
+        proc->pid = -1;
+        proc->cr3 = boot_cr3;
     }
     return proc;
 }
@@ -271,7 +275,7 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
         goto fork_out;
     }
     ret = -E_NO_MEM;
-    //LAB4:EXERCISE2 YOUR CODE
+    //LAB4:EXERCISE2 2016010981
     /*
      * Some Useful MACROs, Functions and DEFINEs, you can use them in below implementation.
      * MACROs or Functions:
@@ -289,13 +293,25 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
      *   nr_process:   the number of process set
      */
 
-    //    1. call alloc_proc to allocate a proc_struct
-    //    2. call setup_kstack to allocate a kernel stack for child process
-    //    3. call copy_mm to dup OR share mm according clone_flag
-    //    4. call copy_thread to setup tf & context in proc_struct
-    //    5. insert proc_struct into hash_list && proc_list
-    //    6. call wakeup_proc to make the new child process RUNNABLE
-    //    7. set ret vaule using child proc's pid
+    proc = alloc_proc();                     //    1. call alloc_proc to allocate a proc_struct
+    if (proc == NULL) goto fork_out;
+    ret = setup_kstack(proc);                //    2. call setup_kstack to allocate a kernel stack for child process
+    if (ret != 0) goto bad_fork_cleanup_proc;
+    ret = copy_mm(clone_flags, proc);        //    3. call copy_mm to dup OR share mm according clone_flag
+    if (ret != 0) goto bad_fork_cleanup_kstack;
+    copy_thread(proc, stack, tf);            //    4. call copy_thread to setup tf & context in proc_struct
+    bool intr_flag;
+    local_intr_save(intr_flag);
+    {
+        proc->pid = get_pid();
+        hash_proc(proc);                     //    5. insert proc_struct into hash_list && proc_list
+        list_add(&proc_list, &proc->list_link);
+        nr_process++;
+    }
+    local_intr_restore(intr_flag);
+    wakeup_proc(proc);                       //    6. call wakeup_proc to make the new child process RUNNABLE
+    ret = proc->pid;                         //    7. set ret vaule using child proc's pid
+
 fork_out:
     return ret;
 
