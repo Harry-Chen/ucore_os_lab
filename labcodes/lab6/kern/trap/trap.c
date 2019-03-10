@@ -16,6 +16,8 @@
 #include <sched.h>
 #include <sync.h>
 #include <proc.h>
+#include <string.h>
+#include <sched.h>
 
 #define TICK_NUM 100
 
@@ -42,7 +44,7 @@ static struct pseudodesc idt_pd = {
 /* idt_init - initialize IDT to each of the entry points in kern/trap/vectors.S */
 void
 idt_init(void) {
-     /* LAB1 YOUR CODE : STEP 2 */
+     /* LAB1 201601098 : STEP 2 */
      /* (1) Where are the entry addrs of each Interrupt Service Routine (ISR)?
       *     All ISR's entry addrs are stored in __vectors. where is uintptr_t __vectors[] ?
       *     __vectors[] is in kern/trap/vector.S which is produced by tools/vector.c
@@ -54,9 +56,19 @@ idt_init(void) {
       *     You don't know the meaning of this instruction? just google it! and check the libs/x86.h to know more.
       *     Notice: the argument of lidt is idt_pd. try to find it!
       */
-     /* LAB5 YOUR CODE */ 
+     /* LAB5 2016010981 */ 
      //you should update your lab1 code (just add ONE or TWO lines of code), let user app to use syscall to get the service of ucore
      //so you should setup the syscall interrupt gate in here
+     extern uintptr_t __vectors[];
+     int i;
+     for (i = 0; i < 256; ++i) {
+         if (i != T_SYSCALL && i != T_SWITCH_TOK) {
+            SETGATE(idt[i], 0, KERNEL_CS, __vectors[i], DPL_KERNEL);
+         } else {
+            SETGATE(idt[i], i == T_SYSCALL, KERNEL_CS, __vectors[i], DPL_USER);
+         }
+     }
+     lidt(&idt_pd);
 }
 
 static const char *
@@ -214,21 +226,16 @@ trap_dispatch(struct trapframe *tf) {
     LAB3 : If some page replacement algorithm(such as CLOCK PRA) need tick to change the priority of pages,
     then you can add code here. 
 #endif
-        /* LAB1 YOUR CODE : STEP 3 */
-        /* handle the timer interrupt */
-        /* (1) After a timer interrupt, you should record this event using a global variable (increase it), such as ticks in kern/driver/clock.c
-         * (2) Every TICK_NUM cycle, you can print some info using a funciton, such as print_ticks().
-         * (3) Too Simple? Yes, I think so!
-         */
-        /* LAB5 YOUR CODE */
-        /* you should upate you lab1 code (just add ONE or TWO lines of code):
-         *    Every TICK_NUM cycle, you should set current process's current->need_resched = 1
-         */
-        /* LAB6 YOUR CODE */
+        /* LAB6 2016010981 */
         /* you should upate you lab5 code
          * IMPORTANT FUNCTIONS:
 	     * sched_class_proc_tick
          */
+        ++ticks;
+        if (ticks % TICK_NUM == 0) {
+            print_ticks();
+            sched_class_proc_tick(current);
+        }
         break;
     case IRQ_OFFSET + IRQ_COM1:
         c = cons_getc();
@@ -237,11 +244,45 @@ trap_dispatch(struct trapframe *tf) {
     case IRQ_OFFSET + IRQ_KBD:
         c = cons_getc();
         cprintf("kbd [%03d] %c\n", c, c);
+        if (c == '3') goto _switch_to_user;
+        else if (c == '0') goto _switch_to_kernel;
         break;
-    //LAB1 CHALLENGE 1 : YOUR CODE you should modify below codes.
+    //LAB1 CHALLENGE 1 : 2016010981
     case T_SWITCH_TOU:
+    _switch_to_user:
+        if (trap_in_kernel(tf)) {
+            // since we are still on the same stack, we cannot use the saved trapframe
+            // or information of caller function will be popped to soon
+            struct trapframe temp_tf = *tf;
+            // first set all segment selectors
+            temp_tf.tf_cs = USER_CS;
+            temp_tf.tf_ss = temp_tf.tf_gs = temp_tf.tf_fs = temp_tf.tf_es = temp_tf.tf_ds = USER_DS;
+            // then set the ESP to the ESP of switch_to_user()
+            // the last two members of tf is ACTUALLY not saved trapframe but ESP and return address of switch_to_user()
+            temp_tf.tf_esp = (uintptr_t)tf + offsetof(struct trapframe, tf_esp);
+            // grant IO privilege
+            temp_tf.tf_eflags |= FL_IOPL_3;
+            // let __trapret use the temporary stack we set up
+            *((uint32_t *)tf - 1) = (uint32_t) &temp_tf;
+        }
+        break;
     case T_SWITCH_TOK:
-        panic("T_SWITCH_** ??\n");
+    _switch_to_kernel:
+        if (!trap_in_kernel(tf)) {
+            // triggered in user space, SS:ESP saved to one kernel stack (stack0 in pmm.c)
+            // so we should still use the user stack, only changing segment selectors
+            // however, since we do not switch privilege level, the processor will not pop SS:ESP
+            // so we need to set up the temporary stack on user stack, or switch_to_user() will not return normally
+            struct trapframe *user_tf = (struct trapframe *)(tf->tf_esp - sizeof(struct trapframe) + 2 * sizeof(uint32_t));
+            memcpy(user_tf, tf, sizeof(struct trapframe) - 2 * sizeof(uint32_t));
+            user_tf->tf_cs = KERNEL_CS;
+            // SS cannot be set, or the return address of switch_to_kernel() will be overridden
+            user_tf->tf_gs = user_tf->tf_fs = user_tf->tf_es = user_tf->tf_ds = KERNEL_DS;
+            // revoke IO privilege
+            user_tf->tf_eflags &= ~FL_IOPL_3;
+            // let __trapret use the user stack
+            *((uint32_t *)tf - 1) = (uint32_t) user_tf;
+        }
         break;
     case IRQ_OFFSET + IRQ_IDE1:
     case IRQ_OFFSET + IRQ_IDE2:
