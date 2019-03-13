@@ -232,9 +232,11 @@ trap_dispatch(struct trapframe *tf) {
 	     * sched_class_proc_tick
          */
         ++ticks;
+        // proc_tick has to be called outside comparison
+        // or some thread will get too many time slices
+        sched_class_proc_tick(current);
         if (ticks % TICK_NUM == 0) {
             print_ticks();
-            sched_class_proc_tick(current);
         }
         break;
     case IRQ_OFFSET + IRQ_COM1:
