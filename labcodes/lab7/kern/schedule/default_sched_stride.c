@@ -126,6 +126,7 @@ stride_pick_next(struct run_queue *rq) {
       * (2) update p;s stride value: p->lab6_stride
       * (3) return p
       */
+     // return NULL if no process is RUNNABLE
      if (rq->lab6_run_pool == NULL) {
           return NULL;
      }

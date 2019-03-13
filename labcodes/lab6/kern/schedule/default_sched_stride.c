@@ -126,6 +126,10 @@ stride_pick_next(struct run_queue *rq) {
       * (2) update p;s stride value: p->lab6_stride
       * (3) return p
       */
+     // return NULL if no process is RUNNABLE
+     if (rq->lab6_run_pool == NULL) {
+          return NULL;
+     }
      struct proc_struct *p = le2proc(rq->lab6_run_pool, lab6_run_pool);
      p->lab6_stride += BIG_STRIDE / p->lab6_priority;
      return p;
