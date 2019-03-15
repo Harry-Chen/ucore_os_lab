@@ -589,7 +589,7 @@ sfs_io_nolock(struct sfs_fs *sfs, struct sfs_inode *sin, void *buf, off_t offset
     uint32_t blkno = offset / SFS_BLKSIZE;          // The NO. of Rd/Wr begin block
     uint32_t nblks = endpos / SFS_BLKSIZE - blkno;  // The size of Rd/Wr blocks
 
-  //LAB8:EXERCISE1 YOUR CODE HINT: call sfs_bmap_load_nolock, sfs_rbuf, sfs_rblock,etc. read different kind of blocks in file
+  //LAB8:EXERCISE1 2016010981 HINT: call sfs_bmap_load_nolock, sfs_rbuf, sfs_rblock,etc. read different kind of blocks in file
 	/*
 	 * (1) If offset isn't aligned with the first block, Rd/Wr some content from offset to the end of the first block
 	 *       NOTICE: useful function: sfs_bmap_load_nolock, sfs_buf_op
@@ -599,6 +599,49 @@ sfs_io_nolock(struct sfs_fs *sfs, struct sfs_inode *sin, void *buf, off_t offset
      * (3) If end position isn't aligned with the last block, Rd/Wr some content from begin to the (endpos % SFS_BLKSIZE) of the last block
 	 *       NOTICE: useful function: sfs_bmap_load_nolock, sfs_buf_op	
 	*/
+
+    // split the range into three parts: 
+    // [offset, align_begin]: possibly empty, not aligned
+    // [align_begin, align_end]: aligned
+    // [align_end, endpos]: possibly empty, not aligned
+    uint32_t align_begin = ROUNDUP(offset, SFS_BLKSIZE);
+    uint32_t align_end = ROUNDDOWN(endpos, SFS_BLKSIZE);
+
+#define CHECK_RET {if (ret != 0) goto out;}
+#define READ_UNALIGNED(size, blk, offset)   ret = sfs_bmap_load_nolock(sfs, sin, (blk), &ino); \
+                                            CHECK_RET \
+                                            ret = sfs_buf_op(sfs, buf, (size), ino, (offset)); \
+                                            CHECK_RET \
+                                            alen += (size); \
+                                            buf += (size);
+
+    if (align_begin == align_end + SFS_BLKSIZE) {
+        // [offset, endpos] is just in one block, not aligned
+        READ_UNALIGNED(endpos - offset, blkno, offset % SFS_BLKSIZE);
+    } else {
+        // three parts
+        // first unaligned block
+        if (align_begin > offset) {
+            READ_UNALIGNED(align_begin - offset, blkno, offset % SFS_BLKSIZE)
+        }
+        // aligned blocks
+        size_t current_block = align_begin / SFS_BLKSIZE;
+        size_t end_block = align_end / SFS_BLKSIZE;
+        while (current_block < end_block) {
+            ret = sfs_bmap_load_nolock(sfs, sin, current_block, &ino);
+            CHECK_RET;
+            ret = sfs_block_op(sfs, buf, ino, 1);
+            CHECK_RET;
+            alen += SFS_BLKSIZE;
+            buf += SFS_BLKSIZE;
+            ++current_block;
+        }
+        // last unaligned block
+        if (endpos > align_end) {
+            READ_UNALIGNED(endpos - align_end, end_block, 0);
+        }
+    }
+
 out:
     *alenp = alen;
     if (offset + alen > sin->din->size) {
